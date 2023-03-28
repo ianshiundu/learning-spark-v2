@@ -10,4 +10,6 @@ object Config {
   val jsonDataset: String = config.getString("dataset.json-dataset")
 
   val sfFireDataset: String = config.getString("dataset.fire-calls-dataset")
+
+  val deviceIoTData: String = config.getString("dataset.device-iot-dataset")
 }

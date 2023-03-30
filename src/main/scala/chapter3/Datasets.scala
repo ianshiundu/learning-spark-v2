@@ -24,4 +24,7 @@ object Datasets extends Spark {
   val dsTemp: Dataset[DeviceTempByCountry] = ds
     .filter(_.temp > 25)
     .map(d => DeviceTempByCountry(d.temp, d.device_name, d.device_id, d.cca3))
+
+
+//  filterTempDS.show(false)
 }

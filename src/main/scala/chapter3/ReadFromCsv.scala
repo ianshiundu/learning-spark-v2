@@ -4,10 +4,11 @@ import spark.Spark
 import org.apache.spark.sql.types._
 import config.Config._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, count_distinct, desc, to_timestamp}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{functions => F}
 
 object ReadFromCsv extends Spark {
+  import spark.implicits._
 
   val fireSchema: StructType = StructType(Array(
     StructField("CallNumber", IntegerType, nullable = true),
@@ -15,29 +16,29 @@ object ReadFromCsv extends Spark {
     StructField("IncidentNumber", IntegerType, nullable = true),
     StructField("CallType", StringType, nullable = true),
     StructField("Location", StringType, nullable = true),
-  StructField("CallDate", StringType, nullable = true),
-  StructField("WatchDate", StringType, nullable = true),
-  StructField("CallFinalDisposition", StringType, nullable = true),
-  StructField("AvailableDtTm", StringType, nullable = true),
-  StructField("Address", StringType, nullable = true),
-  StructField("City", StringType, nullable = true),
-  StructField("Zipcode", IntegerType, nullable = true),
-  StructField("Battalion", StringType, nullable = true),
-  StructField("StationArea", StringType, nullable = true),
-  StructField("Box", StringType, nullable = true),
-  StructField("OriginalPriority", StringType, nullable = true),
-  StructField("Priority", StringType, nullable = true),
-  StructField("FinalPriority", IntegerType, nullable = true),
-  StructField("ALSUnit", BooleanType, nullable = true),
-  StructField("CallTypeGroup", StringType, nullable = true),
-  StructField("NumAlarms", IntegerType, nullable = true),
-  StructField("UnitType", StringType, nullable = true),
-  StructField("UnitSequenceInCallDispatch", IntegerType, nullable = true),
-  StructField("FirePreventionDistrict", StringType, nullable = true),
-  StructField("SupervisorDistrict", StringType, nullable = true),
-  StructField("Neighborhood", StringType, nullable = true),
-  StructField("RowID", StringType, nullable = true),
-  StructField("Delay", FloatType, nullable = true)))
+    StructField("CallDate", StringType, nullable = true),
+    StructField("WatchDate", StringType, nullable = true),
+    StructField("CallFinalDisposition", StringType, nullable = true),
+    StructField("AvailableDtTm", StringType, nullable = true),
+    StructField("Address", StringType, nullable = true),
+    StructField("City", StringType, nullable = true),
+    StructField("Zipcode", StringType, nullable = true),
+    StructField("Battalion", StringType, nullable = true),
+    StructField("StationArea", StringType, nullable = true),
+    StructField("Box", StringType, nullable = true),
+    StructField("OriginalPriority", StringType, nullable = true),
+    StructField("Priority", StringType, nullable = true),
+    StructField("FinalPriority", IntegerType, nullable = true),
+    StructField("ALSUnit", BooleanType, nullable = true),
+    StructField("CallTypeGroup", StringType, nullable = true),
+    StructField("NumAlarms", IntegerType, nullable = true),
+    StructField("UnitType", StringType, nullable = true),
+    StructField("UnitSequenceInCallDispatch", IntegerType, nullable = true),
+    StructField("FirePreventionDistrict", StringType, nullable = true),
+    StructField("SupervisorDistrict", StringType, nullable = true),
+    StructField("Neighborhood", StringType, nullable = true),
+    StructField("RowID", StringType, nullable = true),
+    StructField("Delay", FloatType, nullable = true)))
 
   val fireDF: DataFrame = spark.read.schema(fireSchema).option("header", "true").csv(sfFireDataset)
 //  val parquetPath = "/Users/ian/learning/fire-data"
@@ -99,5 +100,60 @@ object ReadFromCsv extends Spark {
     .select(F.sum("NumAlarms"), F.avg("ResponseDelayedinMins"),
       F.min("ResponseDelayedinMins"), F.max("ResponseDelayedinMins"))
 
+  val fireDF2018 = fireDF
+    .filter(
+      col("CallType").isNotNull &&
+        year(to_timestamp(col("CallDate"), "MM/dd/yyyy")) === "2018"
+    )
+
+  val callTypesIn2018 =
+    fireDF2018
+      .select("CallType")
+      .distinct()
+
+//  callTypesIn2018.show(truncate = false)
+
+  val monthsWithTheHighestCalls =
+    fireDF2018
+      .withColumn("Month", month(to_timestamp(col("CallDate"), "MM/dd/yyyy")))
+      .groupBy("Month")
+      .agg(count(col("CallType")).as("NumberOfCalls"))
+      .orderBy(desc("NumberOfCalls"))
+      .show(truncate = false)
+
+
+  val neighborhoodsWithTheMostFireCalls =
+    fireDF2018
+      .filter(col("Neighborhood").isNotNull)
+      .groupBy("Neighborhood")
+      .agg(count(col("CallType")).as("NumberOfCalls"))
+      .orderBy(desc("NumberOfCalls"))
+
+  neighborhoodsWithTheMostFireCalls.show(10) //take(1).foreach(println)//.show(1)
+
+  val worstResponseTimesByNeighborhoods=
+    fireDF2018.filter(col("Neighborhood").isNotNull).groupBy("Neighborhood")
+      .agg(max("Delay").alias("MaxResponseDelayInMins"))
+      .orderBy(desc("MaxResponseDelayInMins"))
+
+  worstResponseTimesByNeighborhoods.show(false)
+
+  val weekWithTheMostFireCalls =
+    fireDF2018
+      .withColumn("IncidentDate", to_timestamp(col("CallDate"), "MM/dd/yyyy"))
+      .groupBy(weekofyear(col("IncidentDate")).as("WeekOfTheYear"))
+      .count()
+      .orderBy(desc("count"))
+
+  weekWithTheMostFireCalls.show(10,truncate = false)
+
+  val neighborhoodsWithTheMostFireCalls2 =
+    fireDF2018
+      .filter(col("Neighborhood").isNotNull)
+      .groupBy("Neighborhood")
+      .count()
+      .orderBy(desc("count"))
+
+  neighborhoodsWithTheMostFireCalls2.show(1) //take(1).foreach(println)//.show(1)
 
 }
